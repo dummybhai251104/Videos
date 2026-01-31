@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<title>Player</title>
+</head>
+<body style="
+  margin:0;
+  background:#000;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+">
+<div id="player" style="position:relative;width:90vw;max-width:600px;">
+  <video
+    id="video"
+    playsinline
+    style="width:100%;background:#000;"
+  ></video>
+  <button id="playBtn" style="
+    position:absolute;
+    inset:0;
+    border:0;
+    background:rgba(0,0,0,.45);
+    color:#fff;
+    font-size:48px;
+    cursor:pointer;
+  ">▶</button>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const q = params.get("q");
+const d = "xxxbp.tv";
+if (!q) {
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    "<p style='color:#fff'>Missing video ID.</p>"
+  );
+  throw new Error("Missing q");
+}
+const v = document.getElementById("video");
+const btn = document.getElementById("playBtn");
+async function fetchStream() {
+  const r = await fetch(`https://api.${d}/hls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `id=${encodeURIComponent(q)}`
+  });
+  const j = await r.json();
+  return j.master || (Array.isArray(j.mp4) && j.mp4[0]?.src) || null;
+}
+function fs(el) {
+  if (el.requestFullscreen) el.requestFullscreen();
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  else if (el.msRequestFullscreen) el.msRequestFullscreen();
+}
+btn.onclick = async () => {
+  btn.style.display = "none";
+  const u = await fetchStream();
+  if (!u) {
+    alert("Failed to load video");
+    return;
+  }
+  fs(v);
+  if (Hls.isSupported()) {
+    const h = new Hls();
+    h.attachMedia(v);
+    h.on(Hls.Events.MEDIA_ATTACHED, () => {
+      h.loadSource(u);
+    });
+    h.on(Hls.Events.MANIFEST_PARSED, () => {
+      v.play();
+    });
+  } else if (v.canPlayType("application/vnd.apple.mpegurl")) {
+    v.src = u;
+    v.addEventListener("loadedmetadata", () => v.play());
+  } else {
+    alert("HLS not supported");
+  }
+};
+v.addEventListener("click", () => {
+  if (v.paused) v.play();
+  else v.pause();
+});
+v.addEventListener("pause", () => {
+  btn.style.display = "block";
+});
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && !v.paused) {
+    btn.style.display = "none";
+  }
+});
+document.addEventListener("webkitfullscreenchange", () => {
+  if (!document.webkitFullscreenElement && !v.paused) {
+    btn.style.display = "none";
+  }
+});
+v.addEventListener("playing", () => {
+  btn.style.display = "none";
+});
+</script>
+</body>
+</html>
