@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>📽️ Videos</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<style>
+:root {
+  --btn-width: 240px;
+  --btn-height: 120px;
+  --primary: #1f6feb;
+  --primary-dark: #1158c7;
+  --bg: #121212;
+  --text: #e0e0e0;
+  --btn-spacing: 0.5em;
+}
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.main-wrapper {
+  margin-top: 8vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1em;
+  width: 100%;
+  max-width: 1000px;
+  padding: 0 1em;
+  flex-grow: 1;
+  overflow-y: auto;
+}
+.row {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--btn-spacing);
+  width: 100%;
+}
+.random-buttons-container {
+  display: flex;
+  justify-content: center;
+  gap: var(--btn-spacing);
+  flex-wrap: wrap;
+  margin-bottom: 2em;
+}
+button,
+select {
+  background: linear-gradient(145deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 1.2em;
+  font-weight: 500;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  width: var(--btn-width);
+  height: var(--btn-height);
+  max-width: 90vw;
+}
+select {
+  height: auto;
+  min-height: 3em;
+  padding: 0.5em;
+  font-size: 1em;
+  width: 260px;
+}
+#container,
+h1,
+h2,
+h3,
+.video-link,
+.source-block,
+#backToTop {
+  display: none !important;
+}
+@media (max-width: 600px) {
+  button {
+    font-size: 0.8em;
+    width: 100px;
+    height: 80px;
+  }
+  select {
+    width: 280px;
+  }
+}
+.source-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--btn-spacing);
+  margin-top: 1em;
+  width: 100%;
+}
+.dropdown-wrapper {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2em;
+  margin-bottom: 15em;
+}
+</style>
+</head>
+<body>
+<div class="main-wrapper">
+  <div class="random-buttons-container" id="random-buttons"></div>
+  <div class="source-buttons" id="source-buttons"></div>
+
+  <div class="dropdown-wrapper">
+    <div class="row">
+      <select id="categorySelect"><option value="">Select a Performer</option></select>
+      <select id="channelSelect"><option value="">Select a Channel</option></select>
+    </div>
+    <div class="row">
+      <button id="playRandomCategoryBtn">🔀 Performer</button>
+      <button id="playRandomChannelBtn">🔀 Channel</button>
+      <button id="playSelectedBtn" disabled>▶️ Play from Selected (0)</button>
+    </div>
+  </div>
+</div>
+<div id="container"></div>
+<script>
+const PLAYER = "dependencies/indian.html";
+const MIN_VIDEOS = 8;
+
+let streamableLinks = {};
+
+fetch("dependencies/videos.json")
+  .then(res => {
+    if (!res.ok) throw new Error("Failed to load videos.json");
+    return res.json();
+  })
+  .then(data => {
+    streamableLinks = data;
+    initApp();
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Failed to load video data");
+  });
+
+function initApp() {
+  const sourceButtonsDiv = document.getElementById("source-buttons");
+  const categorySelect = document.getElementById("categorySelect");
+  const channelSelect = document.getElementById("channelSelect");
+  const playSelectedBtn = document.getElementById("playSelectedBtn");
+
+  const categoryMap = {};
+  const channelMap = {};
+  const getRandomItem = arr => arr[Math.floor(Math.random() * arr.length)];
+  const byAlpha = (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
+
+  const openVideo = key => {
+    if (key.startsWith("id:")) {
+      window.open(`${PLAYER}?q=${key.slice(3)}`, "_blank");
+    } else {
+      window.open(key, "_blank", "noopener noreferrer");
+    }
+  };
+
+  // Build source buttons and mappings
+  Object.entries(streamableLinks).forEach(([source, videos]) => {
+    sourceButtonsDiv.appendChild(Object.assign(
+      document.createElement("button"),
+      {
+        textContent: `🔀 ${source} (${videos.length})`,
+onclick: () => {
+  const keys = videos
+    .map(v =>
+      v.u && v.u.trim()
+        ? v.u
+        : v.id
+        ? `id:${v.id}`
+        : null
+    )
+    .filter(Boolean);
+
+  if (keys.length) openVideo(getRandomItem(keys));
+}
+      }
+    ));
+
+    videos.forEach(v => {
+const key =
+  v.u && v.u.trim()
+    ? v.u
+    : v.id
+    ? `id:${v.id}`
+    : null;
+
+if (!key) return;
+
+      // Safely handle performers array
+(v.p || v.performers || [])
+        .filter(p => p && p.trim())
+        .forEach(p => {
+          (categoryMap[p] ??= []).push(key);
+        });
+      // Safely handle channel array
+(v.c || v.channel || [])
+        .filter(c => c && c.trim())
+        .forEach(c => {
+          (channelMap[c] ??= []).push(key);
+        });
+    });
+  });
+
+  function filterMapByMin(map) {
+    return Object.fromEntries(
+      Object.entries(map).filter(([, arr]) => arr.length >= MIN_VIDEOS)
+    );
+  }
+
+  let filteredCategoryMap = filterMapByMin(categoryMap);
+  let filteredChannelMap = filterMapByMin(channelMap);
+
+  function populateSorted(selectEl, map, placeholder, keepValue = null) {
+    selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+    Object.keys(map).sort(byAlpha).forEach(k => {
+      const opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = `${k} (${map[k].length})`;
+      if (k === keepValue) opt.selected = true;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  populateSorted(categorySelect, filteredCategoryMap, "Select a Performer");
+  populateSorted(channelSelect, filteredChannelMap, "Select a Channel");
+
+  function updateCount() {
+    const p = categorySelect.value;
+    const c = channelSelect.value;
+    if (p && c) {
+      const vids = filteredCategoryMap[p].filter(k => filteredChannelMap[c].includes(k));
+      playSelectedBtn.textContent = `▶️ Play from Selected (${vids.length})`;
+      playSelectedBtn.disabled = vids.length === 0;
+    } else {
+      playSelectedBtn.textContent = `▶️ Play from Selected (0)`;
+      playSelectedBtn.disabled = true;
+    }
+  }
+
+  categorySelect.onchange = () => {
+    const p = categorySelect.value;
+    if (!p) return;
+    const currentChannel = channelSelect.value;
+    const chans = Object.entries(filteredChannelMap)
+      .filter(([, keys]) => keys.some(k => filteredCategoryMap[p].includes(k)))
+      .reduce((o, [k, v]) => (o[k] = v, o), {});
+    populateSorted(
+      channelSelect,
+      chans,
+      "Select a Channel",
+      currentChannel in chans ? currentChannel : null
+    );
+    updateCount();
+  };
+
+  channelSelect.onchange = () => {
+    const c = channelSelect.value;
+    if (!c) return;
+    const currentPerformer = categorySelect.value;
+    const perfs = Object.entries(filteredCategoryMap)
+      .filter(([, keys]) => keys.some(k => filteredChannelMap[c].includes(k)))
+      .reduce((o, [k, v]) => (o[k] = v, o), {});
+    populateSorted(
+      categorySelect,
+      perfs,
+      "Select a Performer",
+      currentPerformer in perfs ? currentPerformer : null
+    );
+    updateCount();
+  };
+
+  // Initial count update after populating dropdowns
+  updateCount();
+
+  document.getElementById("playRandomCategoryBtn").onclick = () => {
+    const p = categorySelect.value;
+    if (p) openVideo(getRandomItem(filteredCategoryMap[p]));
+  };
+
+  document.getElementById("playRandomChannelBtn").onclick = () => {
+    const c = channelSelect.value;
+    if (c) openVideo(getRandomItem(filteredChannelMap[c]));
+  };
+
+  playSelectedBtn.onclick = () => {
+    const p = categorySelect.value;
+    const c = channelSelect.value;
+    if (!p || !c) return;
+    const vids = filteredCategoryMap[p].filter(k => filteredChannelMap[c].includes(k));
+    if (vids.length) openVideo(getRandomItem(vids));
+  };
+}
+</script>
+</body>
+</html>
